@@ -24,8 +24,8 @@ A self-hosted, modern IPTV web client designed to work seamlessly with **ErsatzT
 
 1. Clone or download the repository:
    ```bash
-   git clone https://github.com/yourusername/cineflicks-tv.git
-   cd cineflicks-tv
+   git clone https://github.com/Nammurg/ErsatzTV_FrontEnd.git
+   cd ErsatzTV_FrontEnd
 2. Modify the BASE_URL in the <script> section of the HTML file to point to your ErsatzTV instance:
    ```javascript
     const BASE_URL = "https://your-ersatztv-instance.com";
