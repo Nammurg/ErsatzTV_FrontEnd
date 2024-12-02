@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ErsatzTV_FrontEnd</title>
+    <style>
+        /* Basic resets and styling */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #121212; /* Dark background */
+            color: #e0e0e0; /* Light text color */
+        }
+
+        /* Layout container */
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Left side (menu) */
+        .left {
+            width: 30%;
+            background-color: #1f1f1f; /* Darker background for the left side */
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        .category {
+            margin-bottom: 20px;
+        }
+
+        .category h3 {
+            color: #ff4081; /* Category title color */
+            text-align: center;
+        }
+
+        .channel {
+            margin: 5px 0;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .channel:hover {
+            background-color: #444;
+        }
+
+        .channel img {
+            width: 50px;
+            height: 50px;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        .channel-name {
+            display: inline-block;
+            color: white;
+            font-weight: bold;
+        }
+
+        /* Right side (content area) */
+        .right {
+            width: 70%;
+            padding: 20px;
+            background-color: #212121; /* Darker background for the right side */
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* Center vertically */
+            align-items: center; /* Center horizontally */
+        }
+
+        /* Video player styling */
+        video {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+
+        /* EPG container styles */
+        .epg-container {
+            width: 100%;
+            max-width: 600px;
+            text-align: left;
+            background-color: #333333;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            margin-top: 20px;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background-color: #555;
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar-inner {
+            height: 100%;
+            background-color: rgb(255, 64, 129);
+            transition: width 1s linear;
+            width: 0;
+        }
+
+        .time-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            color: #f5f5f5;
+            margin-top: 5px;
+            font-weight: bold;
+        }
+
+        .now-next {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #f5f5f5;
+        }
+
+        .inline {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .inline span:first-child {
+            font-weight: bold;
+            color: rgb(255, 64, 129);
+        }
+
+        .inline span:last-child {
+            font-weight: normal;
+            color: #f5f5f5;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Left side (menu) -->
+        <div class="left" id="left-side">
+            <!-- Categories and channels will be dynamically added here -->
+        </div>
+
+        <!-- Right content area for the video player and EPG -->
+        <div class="right">
+            <!-- Embed a video player -->
+            <video id="video-player" controls>
+                Your browser does not support HTML5 video.
+            </video>
+
+            <!-- EPG Now and Next Section -->
+            <div class="epg-container">
+                <div class="progress-bar-container">
+                    <div class="progress-bar">
+                        <div class="progress-bar-inner" id="progress-bar"></div>
+                    </div>
+                    <div class="time-labels">
+                        <span id="start-time">--:--</span>
+                        <span id="end-time">--:--</span>
+                    </div>
+                </div>
+                <div class="now-next">
+                    <div class="inline">
+                        <span id="now-label">Now:</span>
+                        <span id="now-movie">Loading...</span>
+                    </div>
+                    <div class="inline">
+                        <span id="next-label">Next:</span>
+                        <span id="next-movie">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+<script>
+    // Define the base URL at the beginning of the script
+    const BASE_URL = "https://your-ersatztv-instance.com";
+
+    // Store the current channel ID
+    let currentChannelId = null;
+
+    // Fetch the M3U8 file from the provided URL
+    fetch(`${BASE_URL}/iptv/channels.m3u`)
+        .then(response => response.text())
+        .then(data => {
+            // Parse the M3U8 data
+            const lines = data.split('\n');
+            const channelsByCategory = {};
+
+            let currentCategory = null;
+
+            // Iterate through each line to extract relevant information
+            lines.forEach(line => {
+                if (line.startsWith('#EXTINF')) {
+                    // Extract group-title, tvg-id, logo, name, and URL
+                    const groupTitleMatch = line.match(/group-title="([^"]+)"/);
+                    const tvgNameMatch = line.match(/tvg-name="([^"]+)"/);
+                    const tvgIdMatch = line.match(/tvg-id="([^"]+)"/);  // Updated to use tvg-id
+                    const tvgLogoMatch = line.match(/tvg-logo="([^"]+)"/);
+
+                    if (groupTitleMatch && tvgNameMatch && tvgIdMatch && tvgLogoMatch) {
+                        const groupTitle = groupTitleMatch[1];
+                        const tvgName = tvgNameMatch[1];
+                        const tvgId = tvgIdMatch[1]; // Now using tvg-id
+                        const tvgLogo = tvgLogoMatch[1];
+
+                        const channelUrl = `${BASE_URL}/iptv/channel/${tvgId}.m3u8?mode=segmenter-v2`; // Use tvg-id here
+
+                        // Add channel to the corresponding category
+                        if (!channelsByCategory[groupTitle]) {
+                            channelsByCategory[groupTitle] = [];
+                        }
+
+                        channelsByCategory[groupTitle].push({
+                            tvgId,
+                            tvgName,
+                            tvgLogo,
+                            channelUrl
+                        });
+                    }
+                }
+            });
+
+            // Dynamically add the categories and channels to the left sidebar
+            const leftSide = document.getElementById('left-side');
+            for (const [category, channels] of Object.entries(channelsByCategory)) {
+                const categoryDiv = document.createElement('div');
+                categoryDiv.classList.add('category');
+
+                const categoryTitle = document.createElement('h3');
+                categoryTitle.textContent = category;
+                categoryDiv.appendChild(categoryTitle);
+
+                // Add channels under the category
+                channels.forEach(channel => {
+                    const channelDiv = document.createElement('div');
+                    channelDiv.classList.add('channel');
+                    channelDiv.onclick = () => loadChannel(channel.tvgId, channel.channelUrl); // Ensure correct tvg-id is passed
+
+                    const channelLogo = document.createElement('img');
+                    channelLogo.src = channel.tvgLogo;
+
+                    const channelName = document.createElement('span');
+                    channelName.classList.add('channel-name');
+                    channelName.textContent = channel.tvgName;  // Only use the channel name here
+
+                    channelDiv.appendChild(channelLogo);
+                    channelDiv.appendChild(channelName);
+
+                    categoryDiv.appendChild(channelDiv);
+                });
+
+                leftSide.appendChild(categoryDiv);
+            }
+        })
+        .catch(() => {
+            // Optionally display a user-friendly message if needed
+            document.getElementById("left-side").textContent = "Error loading channels.";
+        });
+
+    // Function to load the channel URL into the video player and fetch the EPG data
+    function loadChannel(tvgId, url) {
+        currentChannelId = tvgId; // Save the selected channel ID
+
+        const videoPlayer = document.getElementById('video-player');
+
+        // Check if HLS.js is supported in the browser
+        if (Hls.isSupported()) {
+            const hls = new Hls();
+
+            // Attach the HLS.js stream to the video player
+            const videoUrl = `${BASE_URL}/iptv/channel/${tvgId.replace('.etv', '')}.m3u8?mode=segmenter-v2`; // Remove .etv for video
+            hls.loadSource(videoUrl);
+            hls.attachMedia(videoPlayer);
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                videoPlayer.play(); // Play once the stream is ready
+            });
+        } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+            // For browsers that support HLS natively (e.g., Safari)
+            const videoUrl = `${BASE_URL}/iptv/channel/${tvgId.replace('.etv', '')}.m3u8?mode=segmenter-v2`; // Remove .etv for video
+            videoPlayer.src = videoUrl;
+            videoPlayer.play();
+        }
+
+        // Fetch and display EPG for the selected channel
+        fetchEPG(tvgId);
+    }
+
+    // Function to fetch and display EPG data
+    async function fetchEPG(channelId) {
+        const url = `${BASE_URL}/iptv/xmltv.xml`;
+
+        try {
+            // Fetch the XML file
+            const response = await fetch(url);
+            const xmlText = await response.text();
+
+            // Parse the XML
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+
+            // Get current time in UTC
+            const currentTime = new Date();
+            const utcCurrentTime = currentTime.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+
+            // Get all programmes
+            const programmes = Array.from(xmlDoc.getElementsByTagName("programme"));
+
+            // Find the current and upcoming programmes for the selected channel
+            let currentProgramme = null;
+            let nextProgramme = null;
+
+            for (let i = 0; i < programmes.length; i++) {
+                const programme = programmes[i];
+                const start = programme.getAttribute("start").slice(0, 14);
+                const stop = programme.getAttribute("stop").slice(0, 14);
+                const channel = programme.getAttribute("channel");
+
+                if (channel === channelId && utcCurrentTime >= start && utcCurrentTime <= stop) {
+                    currentProgramme = programme;
+                    if (i + 1 < programmes.length) {
+                        nextProgramme = programmes[i + 1];
+                    }
+                    break;
+                }
+            }
+
+            // Update the progress bar and movie details
+            if (currentProgramme) {
+                const startTime = currentProgramme.getAttribute("start");
+                const stopTime = currentProgramme.getAttribute("stop");
+                const title = currentProgramme.getElementsByTagName("title")[0]?.textContent || "Unknown";
+                const year = currentProgramme.getElementsByTagName("date")[0]?.textContent || "N/A";
+
+                // Display "Now" movie
+                document.getElementById("now-movie").textContent = `${title} (${year})`;
+                document.getElementById("start-time").textContent = formatTime(startTime);
+                document.getElementById("end-time").textContent = formatTime(stopTime);
+
+                // Update the progress bar
+                const startTimeMillis = new Date(`${startTime.slice(0, 4)}-${startTime.slice(4, 6)}-${startTime.slice(6, 8)}T${startTime.slice(8, 10)}:${startTime.slice(10, 12)}:${startTime.slice(12, 14)}Z`).getTime();
+                const endTimeMillis = new Date(`${stopTime.slice(0, 4)}-${stopTime.slice(4, 6)}-${stopTime.slice(6, 8)}T${stopTime.slice(8, 10)}:${stopTime.slice(10, 12)}:${stopTime.slice(12, 14)}Z`).getTime();
+
+                const progressPercent = ((currentTime.getTime() - startTimeMillis) / (endTimeMillis - startTimeMillis)) * 100;
+                document.getElementById("progress-bar").style.width = `${Math.min(100, Math.max(0, progressPercent))}%`;
+            } else {
+                document.getElementById("now-movie").textContent = "No movie is currently playing.";
+            }
+
+            // Display "Next" movie
+            if (nextProgramme) {
+                const startTime = nextProgramme.getAttribute("start");
+                const title = nextProgramme.getElementsByTagName("title")[0]?.textContent || "Unknown";
+                const year = nextProgramme.getElementsByTagName("date")[0]?.textContent || "N/A";
+                document.getElementById("next-movie").textContent = `${formatTime(startTime)} - ${title} (${year})`;
+            } else {
+                document.getElementById("next-movie").textContent = "No upcoming movie.";
+            }
+        } catch (error) {
+            // Error message without console log
+            document.getElementById("now-movie").textContent = "Error loading data.";
+            document.getElementById("next-movie").textContent = "Error loading data.";
+        }
+    }
+
+    function formatTime(timeStr) {
+        const hours = timeStr.slice(8, 10);
+        const minutes = timeStr.slice(10, 12);
+        return `${hours}:${minutes}`;
+    }
+    
+// Set up periodic refresh for the EPG area
+    setInterval(() => {
+        if (currentChannelId) {
+            fetchEPG(currentChannelId);
+        }
+    }, 10000); // Refresh every 10 seconds
+</script>
+</body>
+</html>
